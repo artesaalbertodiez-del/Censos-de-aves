@@ -1119,6 +1119,8 @@ function geoIniciarMapa() {
 }
 
 let mapaEscala = 1;
+let mapaZoom = 1, mapaOffX = 0, mapaOffY = 0;
+let mapaBaseW = 0, mapaBaseH = 0;
 
 function initOrtoMapa() {
   const container = document.getElementById('mapa-container');
@@ -1128,43 +1130,165 @@ function initOrtoMapa() {
   const vh = window.innerHeight - 140;
   const vw = window.innerWidth;
 
+  // Cambiar touch-action para gestionar nosotros los gestos
+  container.style.touchAction = 'none';
+  container.style.overflow = 'hidden';
+  container.style.width = vw + 'px';
+  container.style.height = vh + 'px';
+
   if (!ortoImg) {
     ortoImg = new Image();
-    ortoImg.onload = () => drawMapa();
+    ortoImg.onload = () => initDraw();
     ortoImg.src = ORTO.src;
   } else {
-    drawMapa();
+    initDraw();
   }
 
-  function drawMapa() {
+  function initDraw() {
     const ratio = ORTO.imgW / ORTO.imgH;
     let cw = vw, ch = vw / ratio;
     if (ch > vh) { ch = vh; cw = vh * ratio; }
+    mapaBaseW = cw; mapaBaseH = ch;
+    mapaZoom = 1; mapaOffX = 0; mapaOffY = 0;
     mapaEscala = cw / ORTO.imgW;
-    canvas.width = cw; canvas.height = ch;
-    container.style.width = vw + 'px';
-    container.style.height = vh + 'px';
-    ctx.drawImage(ortoImg, 0, 0, cw, ch);
-    renderGeoPuntos(cw, ch);
+    canvas.width = vw; canvas.height = vh;
+    draw();
   }
 
+  function draw() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    const drawW = mapaBaseW * mapaZoom;
+    const drawH = mapaBaseH * mapaZoom;
+    ctx.drawImage(ortoImg, mapaOffX, mapaOffY, drawW, drawH);
+    renderGeoPuntosSobreCanvas(ctx);
+  }
+
+  // ── Pinch zoom y pan táctil ──
+  let lastTouches = null, lastDist = null, tapTimer = null, tapCount = 0;
+  let panStart = null, offStart = null;
+  let didPan = false;
+
+  container.addEventListener('touchstart', e => {
+    e.preventDefault();
+    didPan = false;
+    if (e.touches.length === 2) {
+      lastDist = Math.hypot(
+        e.touches[0].clientX - e.touches[1].clientX,
+        e.touches[0].clientY - e.touches[1].clientY
+      );
+      lastTouches = [{x:e.touches[0].clientX,y:e.touches[0].clientY},
+                     {x:e.touches[1].clientX,y:e.touches[1].clientY}];
+    } else if (e.touches.length === 1) {
+      panStart = {x: e.touches[0].clientX, y: e.touches[0].clientY};
+      offStart = {x: mapaOffX, y: mapaOffY};
+    }
+  }, {passive:false});
+
+  container.addEventListener('touchmove', e => {
+    e.preventDefault();
+    if (e.touches.length === 2) {
+      const newDist = Math.hypot(
+        e.touches[0].clientX - e.touches[1].clientX,
+        e.touches[0].clientY - e.touches[1].clientY
+      );
+      if (lastDist) {
+        const scale = newDist / lastDist;
+        const midX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+        const midY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+        const rect = canvas.getBoundingClientRect();
+        const cx = midX - rect.left, cy = midY - rect.top;
+        const newZoom = Math.min(Math.max(mapaZoom * scale, 0.5), 8);
+        mapaOffX = cx - (cx - mapaOffX) * (newZoom / mapaZoom);
+        mapaOffY = cy - (cy - mapaOffY) * (newZoom / mapaZoom);
+        mapaZoom = newZoom;
+        lastDist = newDist;
+        draw();
+      }
+    } else if (e.touches.length === 1 && panStart) {
+      const dx = e.touches[0].clientX - panStart.x;
+      const dy = e.touches[0].clientY - panStart.y;
+      if (Math.abs(dx) > 5 || Math.abs(dy) > 5) didPan = true;
+      mapaOffX = offStart.x + dx;
+      mapaOffY = offStart.y + dy;
+      draw();
+    }
+  }, {passive:false});
+
+  container.addEventListener('touchend', e => {
+    lastDist = null; lastTouches = null;
+    // Detectar tap simple (sin pan) para añadir observación
+    if (e.changedTouches.length === 1 && !didPan && e.touches.length === 0) {
+      const touch = e.changedTouches[0];
+      const rect = canvas.getBoundingClientRect();
+      const px = touch.clientX - rect.left;
+      const py = touch.clientY - rect.top;
+      // Convertir coordenadas de pantalla a coordenadas de imagen
+      const imgX = (px - mapaOffX) / mapaZoom;
+      const imgY = (py - mapaOffY) / mapaZoom;
+      if (imgX >= 0 && imgX <= mapaBaseW && imgY >= 0 && imgY <= mapaBaseH) {
+        const utm = pxToUtm(imgX, imgY, mapaBaseW, mapaBaseH);
+        pendingUtm = {...utm};
+        abrirModalObs(utm);
+      }
+    }
+    panStart = null;
+  });
+
+  // Zoom con doble clic en escritorio
+  canvas.ondblclick = (e) => {
+    const rect = canvas.getBoundingClientRect();
+    const cx = e.clientX - rect.left, cy = e.clientY - rect.top;
+    const newZoom = Math.min(mapaZoom * 2, 8);
+    mapaOffX = cx - (cx - mapaOffX) * (newZoom / mapaZoom);
+    mapaOffY = cy - (cy - mapaOffY) * (newZoom / mapaZoom);
+    mapaZoom = newZoom;
+    draw();
+  };
+
+  // Clic en escritorio para añadir observación
   canvas.onclick = (e) => {
     const rect = canvas.getBoundingClientRect();
     const px = e.clientX - rect.left, py = e.clientY - rect.top;
-    const utm = pxToUtm(px, py, canvas.width, canvas.height);
-    pendingUtm = {...utm, px, py};
-    abrirModalObs(utm);
+    const imgX = (px - mapaOffX) / mapaZoom;
+    const imgY = (py - mapaOffY) / mapaZoom;
+    if (imgX >= 0 && imgX <= mapaBaseW && imgY >= 0 && imgY <= mapaBaseH) {
+      const utm = pxToUtm(imgX, imgY, mapaBaseW, mapaBaseH);
+      pendingUtm = {...utm};
+      abrirModalObs(utm);
+    }
   };
+
+  // Guardar función draw para poder redibujar al cerrar el modal
+  window._mapaDraw = draw;
+}
+
+function renderGeoPuntosSobreCanvas(ctx) {
+  geoObservaciones.forEach((o, i) => {
+    const p = utmToPx(o.utm_x, o.utm_y, mapaBaseW, mapaBaseH);
+    const px = p.px * mapaZoom + mapaOffX;
+    const py = p.py * mapaZoom + mapaOffY;
+    ctx.beginPath();
+    ctx.arc(px, py, 10, 0, Math.PI*2);
+    ctx.fillStyle = '#e53935';
+    ctx.fill();
+    ctx.strokeStyle = 'white';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    ctx.fillStyle = 'white';
+    ctx.font = 'bold 10px Arial';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(i+1, px, py);
+  });
 }
 
 function renderGeoPuntos(cw, ch) {
-  const cont = document.getElementById('mapa-puntos');
-  cont.innerHTML = geoObservaciones.map((o,i) => {
-    const p = utmToPx(o.utm_x, o.utm_y, cw, ch);
-    return `<div class="punto-obs" style="left:${p.px}px;top:${p.py}px"
-      onclick="geoVerObs(${i})">${i+1}</div>`;
-  }).join('');
+  // Los puntos ahora se dibujan sobre el canvas en renderGeoPuntosSobreCanvas
+  // Esta función se llama para forzar un redibujado
+  if (window._mapaDraw) window._mapaDraw();
   document.getElementById('geo-contador').textContent = `${geoObservaciones.length} obs.`;
+  // Limpiar divs de puntos (ya no se usan)
+  document.getElementById('mapa-puntos').innerHTML = '';
 }
 
 function abrirModalObs(utm) {
@@ -1180,6 +1304,7 @@ function abrirModalObs(utm) {
 function cerrarModal() {
   document.getElementById('modal-obs').classList.remove('abierto');
   pendingUtm = null;
+  if (window._mapaDraw) window._mapaDraw();
 }
 
 function geoGuardarObs() {
