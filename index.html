@@ -659,7 +659,7 @@ function mostrarPantalla(id) {
     'pantalla-geo-sync': 'Sincronizar geo',
     'pantalla-ajustes': 'Configuración',
   };
-  document.getElementById('cab-sub').textContent = subs[id] || 'PE Navaza';
+  document.getElementById('cab-sub').textContent = subs[id] || 'Censos de Aves';
 }
 
 function volverInicio() { mostrarPantalla('pantalla-inicio'); }
@@ -1146,7 +1146,8 @@ function censoCargar(id) {
   const lista=LS.getCensos(), c=lista.find(x=>x.id===id); if(!c) return;
   censoId=id; censosPuntos=c.puntos||[];
   const v=c.visita||{};
-  const set=(eid,val)=>{ const el=document.getElementById(eid); if(el&&val) el.value=val; };
+  const set=(eid,val)=>{ const el=document.getElementById(eid); if(el&&val!==undefined) el.value=val; };
+  set('cv-zona',v.zona);
   set('cv-fecha',v.fecha); set('cv-observador',v.observador);
   set('cv-hora-inicio',v.hora_inicio); set('cv-hora-fin',v.hora_fin);
   set('cv-temperatura',v.temperatura); set('cv-visibilidad',v.visibilidad);
@@ -1613,12 +1614,14 @@ function geoCargar(id) {
   const g=LS.getGeo().find(x=>x.id===id); if(!g) return;
   geoId=id; geoObservaciones=g.observaciones||[];
   const v=g.visita||{};
-  const set=(eid,val)=>{ const el=document.getElementById(eid); if(el&&val) el.value=val; };
+  const set=(eid,val)=>{ const el=document.getElementById(eid); if(el&&val!==undefined) el.value=val; };
+  set('gv-zona',v.zona);
   set('gv-fecha',v.fecha); set('gv-observador',v.observador);
   set('gv-hora-inicio',v.hora_inicio); set('gv-hora-fin',v.hora_fin);
   set('gv-temperatura',v.temperatura); set('gv-visibilidad',v.visibilidad);
   set('gv-viento-dir',v.viento_dir); set('gv-viento-vel',v.viento_vel);
   set('gv-precipitacion',v.precipitacion); set('gv-nubosidad',v.nubosidad);
+  renderGeoObsPanel();
   mostrarPantalla('pantalla-geo-visita');
 }
 
