@@ -4,18 +4,19 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
-<title>Cuaderno de Campo — PE Navaza</title>
+<title>Censos de Aves</title>
 <style>
 :root {
-  --verde: #2E7D32; --verde-claro: #E8F5E9; --azul: #1565C0;
-  --azul-claro: #E3F2FD; --borde: #CCCCCC; --gris: #F5F5F5;
+  --verde: #00695C; --verde-claro: #E0F2F1; --azul: #0277BD;
+  --azul-claro: #E1F5FE; --borde: #CCCCCC; --gris: #F5F5F5;
   --texto: #212121; --texto2: #757575; --sombra: 0 1px 4px rgba(0,0,0,.12);
+  --acento: #FF6F00;
 }
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body { font-family: Arial, sans-serif; font-size: 14px; color: var(--texto); background: #f0f2f5; }
 
 /* CABECERA */
-.cab { background: var(--verde); color: white; padding: 10px 14px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 100; box-shadow: 0 2px 6px rgba(0,0,0,.2); }
+.cab { background: linear-gradient(135deg, #00695C 0%, #0277BD 100%); color: white; padding: 10px 14px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 100; box-shadow: 0 2px 6px rgba(0,0,0,.2); }
 .cab-titulo { font-size: 15px; font-weight: 700; }
 .cab-sub { font-size: 11px; opacity: .8; }
 #cab-acc { display: none; gap: 6px; }
@@ -135,9 +136,12 @@ body { font-family: Arial, sans-serif; font-size: 14px; color: var(--texto); bac
 
 <!-- CABECERA -->
 <div class="cab">
-  <div>
-    <div class="cab-titulo">🦅 PE Navaza</div>
-    <div class="cab-sub" id="cab-sub">Cuaderno de Campo</div>
+  <div style="display:flex;align-items:center;gap:10px">
+    <span style="font-size:26px">🦅</span>
+    <div>
+      <div class="cab-titulo">Censos de Aves</div>
+      <div class="cab-sub" id="cab-sub">PE Navaza</div>
+    </div>
   </div>
   <div id="cab-acc">
     <button class="btn-g btn-sm" id="cab-btn-menu" onclick="volverMenu()" style="display:none">← Menú</button>
@@ -151,10 +155,16 @@ body { font-family: Arial, sans-serif; font-size: 14px; color: var(--texto); bac
 <!-- ══════════ PANTALLA INICIO ══════════ -->
 <div class="pantalla" id="pantalla-inicio">
   <div style="padding:20px 16px;max-width:500px;margin:0 auto">
+    <!-- Ilustración -->
+    <div style="text-align:center;padding:24px 0 16px;background:linear-gradient(135deg,#E0F2F1,#E1F5FE);border-radius:16px;margin-bottom:20px">
+      <div style="font-size:56px;line-height:1.1">🦅</div>
+      <div style="font-size:13px;color:#00695C;font-weight:700;margin-top:8px;letter-spacing:.05em">CENSOS DE AVES</div>
+      <div style="font-size:11px;color:#757575;margin-top:4px">PE Navaza · ARTESA</div>
+    </div>
     <div class="menu-section-title">Módulos</div>
     <button class="menu-btn" onclick="abrirCenso()">
       <div class="menu-btn-ico">🎧</div>
-      <div class="menu-btn-txt"><strong>Censo por estaciones</strong><span>10 estaciones de escucha · registro de especies</span></div>
+      <div class="menu-btn-txt"><strong>Censo por estaciones</strong><span>Registro de especies</span></div>
     </button>
     <button class="menu-btn" onclick="abrirGeo()">
       <div class="menu-btn-ico">🗺️</div>
@@ -897,6 +907,7 @@ function censoNuevo() {
 
 function censoGetVisita() {
   return {
+    zona:        document.getElementById('cv-zona').value,
     fecha:       document.getElementById('cv-fecha').value,
     observador:  document.getElementById('cv-observador').value,
     hora_inicio: document.getElementById('cv-hora-inicio').value,
@@ -934,7 +945,18 @@ function censoCerrar() {
 
 function censoIniciarPuntos() {
   const v = censoGetVisita();
-  if (!v.fecha) { toast('Introduce la fecha'); return; }
+  if (!v.zona)        { toast('⚠ Selecciona la zona de estudio'); return; }
+  if (!v.fecha)       { toast('⚠ Introduce la fecha'); return; }
+  if (!v.observador)  { toast('⚠ Introduce el observador'); return; }
+  if (!v.hora_inicio) { toast('⚠ Introduce la hora de inicio'); return; }
+  if (!v.temperatura) { toast('⚠ Rellena los datos meteorológicos'); return; }
+
+  // Configurar estaciones según la zona
+  const zona = ZONAS[v.zona];
+  if (zona) {
+    const n = zona.estaciones;
+    censosPuntos = [0,...Array.from({length:n},(_,i)=>i+1)].map(num=>({num,horaInicio:'',observaciones:[]}));
+  }
   censoGuardarVisita();
   renderCensoPuntos();
   mostrarPantalla('pantalla-censo-puntos');
@@ -1007,8 +1029,20 @@ function censoAbrirObs(num) {
 }
 
 function censoGuardarObs(num) {
-  const esp = document.getElementById(`co-${num}-especie`)?.value;
-  if (!esp) { toast('Selecciona una especie'); return; }
+  const esp  = document.getElementById(`co-${num}-especie`)?.value;
+  const n    = document.getElementById(`co-${num}-n`)?.value;
+  const tipo = document.getElementById(`co-${num}-tipo`)?.value;
+  const sexo = document.getElementById(`co-${num}-sexo`)?.value;
+  const edad = document.getElementById(`co-${num}-edad`)?.value;
+  const vuelo  = document.getElementById(`co-${num}-vuelo`)?.value;
+  const altura = document.getElementById(`co-${num}-altura`)?.value;
+  if (!esp)    { toast('⚠ Selecciona una especie'); return; }
+  if (!n)      { toast('⚠ Introduce el nº de individuos'); return; }
+  if (!tipo)   { toast('⚠ Selecciona el tipo de observación'); return; }
+  if (!sexo)   { toast('⚠ Selecciona el sexo'); return; }
+  if (!edad)   { toast('⚠ Selecciona la edad'); return; }
+  if (!vuelo)  { toast('⚠ Selecciona el tipo de vuelo'); return; }
+  if (!altura) { toast('⚠ Selecciona la altura de vuelo'); return; }
   const p = censosPuntos.find(x=>x.num===num);
   if (p) p.observaciones.push(leerObs(`co-${num}`));
   censoGuardarVisita();
@@ -1193,6 +1227,7 @@ function geoNuevo() {
 
 function geoGetVisita() {
   return {
+    zona:        document.getElementById('gv-zona').value,
     fecha:       document.getElementById('gv-fecha').value,
     observador:  document.getElementById('gv-observador').value,
     hora_inicio: document.getElementById('gv-hora-inicio').value,
@@ -1226,7 +1261,11 @@ function geoCerrar() {
 
 function geoIniciarMapa() {
   const v=geoGetVisita();
-  if(!v.fecha){toast('Introduce la fecha');return;}
+  if (!v.zona)        { toast('⚠ Selecciona la zona de estudio'); return; }
+  if (!v.fecha)       { toast('⚠ Introduce la fecha'); return; }
+  if (!v.observador)  { toast('⚠ Introduce el observador'); return; }
+  if (!v.hora_inicio) { toast('⚠ Introduce la hora de inicio'); return; }
+  if (!v.temperatura) { toast('⚠ Rellena los datos meteorológicos'); return; }
   geoGuardarVisita();
   mostrarPantalla('pantalla-geo-mapa');
   initOrtoMapa();
@@ -1414,8 +1453,20 @@ function cerrarModal() {
 }
 
 function geoGuardarObs() {
-  const esp = document.getElementById('go-especie')?.value;
-  if (!esp) { toast('Selecciona una especie'); return; }
+  const esp    = document.getElementById('go-especie')?.value;
+  const n      = document.getElementById('go-n')?.value;
+  const tipo   = document.getElementById('go-tipo')?.value;
+  const sexo   = document.getElementById('go-sexo')?.value;
+  const edad   = document.getElementById('go-edad')?.value;
+  const vuelo  = document.getElementById('go-vuelo')?.value;
+  const altura = document.getElementById('go-altura')?.value;
+  if (!esp)    { toast('⚠ Selecciona una especie'); return; }
+  if (!n)      { toast('⚠ Introduce el nº de individuos'); return; }
+  if (!tipo)   { toast('⚠ Selecciona el tipo de observación'); return; }
+  if (!sexo)   { toast('⚠ Selecciona el sexo'); return; }
+  if (!edad)   { toast('⚠ Selecciona la edad'); return; }
+  if (!vuelo)  { toast('⚠ Selecciona el tipo de vuelo'); return; }
+  if (!altura) { toast('⚠ Selecciona la altura de vuelo'); return; }
   if (!pendingUtm) return;
   const obs = {
     ...leerObs('go'),
