@@ -159,7 +159,7 @@ body { font-family: Arial, sans-serif; font-size: 14px; color: var(--texto); bac
     <span style="font-size:26px">🦅</span>
     <div>
       <div class="cab-titulo">Censos de Aves</div>
-      <div class="cab-sub" id="cab-sub">PE Navaza</div>
+      <div class="cab-sub" id="cab-sub">Censos de Aves</div>
     </div>
   </div>
   <div id="cab-acc">
@@ -247,7 +247,7 @@ body { font-family: Arial, sans-serif; font-size: 14px; color: var(--texto); bac
       </div>
     </div>
     <div class="seccion">
-      <div class="sec-cab gris">Tiempo atmosférico</div>
+      <div class="sec-cab">Tiempo atmosférico</div>
       <div class="sec-body">
         <div class="fila f2">
           <div class="campo"><label>Temperatura</label>
@@ -375,7 +375,7 @@ body { font-family: Arial, sans-serif; font-size: 14px; color: var(--texto); bac
       </div>
     </div>
     <div class="seccion">
-      <div class="sec-cab gris">Tiempo atmosférico</div>
+      <div class="sec-cab">Tiempo atmosférico</div>
       <div class="sec-body">
         <div class="fila f2">
           <div class="campo"><label>Temperatura</label>
@@ -419,6 +419,15 @@ body { font-family: Arial, sans-serif; font-size: 14px; color: var(--texto); bac
         </div>
       </div>
     </div>
+    <!-- Apartado observaciones colapsable -->
+    <div class="seccion" id="geo-obs-seccion" style="display:none">
+      <div class="sec-cab" style="cursor:pointer;display:flex;justify-content:space-between;align-items:center"
+        onclick="toggleGeoObsPanel()">
+        <span>Observaciones registradas</span>
+        <span id="geo-obs-badge" style="background:var(--azul);color:white;padding:1px 8px;border-radius:10px;font-size:12px">0</span>
+      </div>
+      <div id="geo-obs-panel" style="display:none"></div>
+    </div>
     <div class="barra-inf">
       <button class="btn-v" onclick="geoIniciarMapa()">🗺️ Abrir ortofoto</button>
       <button class="btn-g" onclick="geoGuardarVisita()">💾 Guardar</button>
@@ -439,11 +448,10 @@ body { font-family: Arial, sans-serif; font-size: 14px; color: var(--texto); bac
       <div id="mapa-puntos"></div>
     </div>
   </div>
-  <div id="geo-obs-panel"></div>
   <div class="barra-inf">
     <button class="btn-v" onclick="geoCerrar()">✅ Cerrar sesión</button>
     <button class="btn-g" onclick="geoGuardarVisita()">💾 Guardar</button>
-    <button class="btn-g" onclick="mostrarPantalla('pantalla-geo-visita')" style="margin-left:auto">← Datos</button>
+    <button class="btn-g" onclick="geoVolverDatos()" style="margin-left:auto">← Datos</button>
   </div>
 </div>
 
@@ -1288,7 +1296,12 @@ function geoIniciarMapa() {
   geoGuardarVisita();
   mostrarPantalla('pantalla-geo-mapa');
   initOrtoMapa();
+}
+
+// Al volver de mapa a datos visita, actualizar panel
+function geoVolverDatos() {
   renderGeoObsPanel();
+  mostrarPantalla('pantalla-geo-visita');
 }
 
 let mapaEscala = 1;
@@ -1300,7 +1313,7 @@ function initOrtoMapa() {
   const wrap      = document.getElementById('mapa-img-wrap');
   const img       = document.getElementById('mapa-img');
 
-  const vh = window.innerHeight - 280; // espacio para barra superior, panel y barra inferior
+  const vh = window.innerHeight - 140; // barra superior + barra inferior
   const vw = window.innerWidth;
   container.style.height = vh + 'px';
 
@@ -1445,11 +1458,24 @@ function abrirModalObs(utm) {
   document.getElementById('modal-obs').classList.add('abierto');
 }
 
-function renderGeoObsPanel() {
+function toggleGeoObsPanel() {
   const panel = document.getElementById('geo-obs-panel');
+  if (panel) panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+}
+
+function renderGeoObsPanel() {
+  const panel   = document.getElementById('geo-obs-panel');
+  const seccion = document.getElementById('geo-obs-seccion');
+  const badge   = document.getElementById('geo-obs-badge');
+  const counter = document.getElementById('geo-contador');
+
+  if (counter) counter.textContent = `${geoObservaciones.length} obs.`;
+  if (badge)   badge.textContent   = geoObservaciones.length;
+  if (seccion) seccion.style.display = geoObservaciones.length > 0 ? 'block' : 'none';
+
   if (!panel) return;
   if (!geoObservaciones.length) {
-    panel.innerHTML = '<p style="padding:10px 12px;font-size:12px;color:var(--texto2)">Sin observaciones aún. Tap en la ortofoto para añadir.</p>';
+    panel.innerHTML = '<p style="padding:10px 12px;font-size:12px;color:var(--texto2)">Sin observaciones aún.</p>';
     return;
   }
   panel.innerHTML = geoObservaciones.map((o, i) => `
@@ -1493,14 +1519,12 @@ function geoGuardarObs() {
     hora: document.getElementById('go-hora')?.value || '',
     ts: Date.now(),
   };
-  // Sin distancia en geo
   delete obs.distancia;
   geoObservaciones.push(obs);
   geoGuardarVisita();
   cerrarModal();
   toast(`✓ ${esp} añadido`);
   renderGeoPuntos();
-  renderGeoObsPanel();
 }
 
 function geoEditarObs(i) {
