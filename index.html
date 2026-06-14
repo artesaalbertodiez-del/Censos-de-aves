@@ -924,7 +924,7 @@ function censoNuevo() {
   const aj = LS.getAj();
   document.getElementById('cv-fecha').value = new Date().toISOString().split('T')[0];
   document.getElementById('cv-observador').value = aj.observador || '';
-  document.getElementById('cv-zona').value = 'navaza';
+  document.getElementById('cv-zona').value = '';
   ['cv-hora-inicio','cv-hora-fin','cv-temperatura','cv-visibilidad',
    'cv-viento-dir','cv-viento-vel','cv-precipitacion','cv-nubosidad'].forEach(id => {
     const el = document.getElementById(id); if(el) el.value='';
@@ -960,6 +960,8 @@ function censoGuardarVisita() {
 }
 
 function censoCerrar() {
+  const v = censoGetVisita();
+  if (!v.hora_fin) { toast('⚠ Introduce la hora de fin antes de cerrar'); return; }
   if (!confirm('¿Cerrar este censo?')) return;
   censoGuardarVisita();
   let lista = LS.getCensos();
@@ -972,13 +974,17 @@ function censoCerrar() {
 
 function censoIniciarPuntos() {
   const v = censoGetVisita();
-  if (!v.zona)        { toast('⚠ Selecciona la zona de estudio'); return; }
-  if (!v.fecha)       { toast('⚠ Introduce la fecha'); return; }
-  if (!v.observador)  { toast('⚠ Introduce el observador'); return; }
-  if (!v.hora_inicio) { toast('⚠ Introduce la hora de inicio'); return; }
-  if (!v.temperatura) { toast('⚠ Rellena los datos meteorológicos'); return; }
+  if (!v.zona)          { toast('⚠ Selecciona la zona de estudio'); return; }
+  if (!v.fecha)         { toast('⚠ Introduce la fecha'); return; }
+  if (!v.observador)    { toast('⚠ Introduce el observador'); return; }
+  if (!v.hora_inicio)   { toast('⚠ Introduce la hora de inicio'); return; }
+  if (!v.temperatura)   { toast('⚠ Selecciona la temperatura'); return; }
+  if (!v.visibilidad)   { toast('⚠ Selecciona la visibilidad'); return; }
+  if (!v.viento_dir)    { toast('⚠ Selecciona la dirección del viento'); return; }
+  if (!v.viento_vel)    { toast('⚠ Selecciona la velocidad del viento'); return; }
+  if (!v.precipitacion) { toast('⚠ Selecciona la precipitación'); return; }
+  if (!v.nubosidad)     { toast('⚠ Selecciona la nubosidad'); return; }
 
-  // Configurar estaciones según la zona
   const zona = ZONAS[v.zona];
   if (zona) {
     const n = zona.estaciones;
@@ -1245,7 +1251,7 @@ function geoNuevo() {
   const aj=LS.getAj();
   document.getElementById('gv-fecha').value=new Date().toISOString().split('T')[0];
   document.getElementById('gv-observador').value=aj.observador||'';
-  document.getElementById('gv-zona').value='navaza';
+  document.getElementById('gv-zona').value='';
   ['gv-hora-inicio','gv-hora-fin','gv-temperatura','gv-visibilidad',
    'gv-viento-dir','gv-viento-vel','gv-precipitacion','gv-nubosidad'].forEach(id=>{
     const el=document.getElementById(id); if(el) el.value='';
@@ -1279,6 +1285,8 @@ function geoGuardarVisita() {
 }
 
 function geoCerrar() {
+  const v = geoGetVisita();
+  if (!v.hora_fin) { toast('⚠ Introduce la hora de fin antes de cerrar'); return; }
   if(!confirm('¿Cerrar esta sesión?')) return;
   geoGuardarVisita();
   let lista=LS.getGeo(); const idx=lista.findIndex(x=>x.id===geoId);
@@ -1289,11 +1297,16 @@ function geoCerrar() {
 
 function geoIniciarMapa() {
   const v=geoGetVisita();
-  if (!v.zona)        { toast('⚠ Selecciona la zona de estudio'); return; }
-  if (!v.fecha)       { toast('⚠ Introduce la fecha'); return; }
-  if (!v.observador)  { toast('⚠ Introduce el observador'); return; }
-  if (!v.hora_inicio) { toast('⚠ Introduce la hora de inicio'); return; }
-  if (!v.temperatura) { toast('⚠ Rellena los datos meteorológicos'); return; }
+  if (!v.zona)          { toast('⚠ Selecciona la zona de estudio'); return; }
+  if (!v.fecha)         { toast('⚠ Introduce la fecha'); return; }
+  if (!v.observador)    { toast('⚠ Introduce el observador'); return; }
+  if (!v.hora_inicio)   { toast('⚠ Introduce la hora de inicio'); return; }
+  if (!v.temperatura)   { toast('⚠ Selecciona la temperatura'); return; }
+  if (!v.visibilidad)   { toast('⚠ Selecciona la visibilidad'); return; }
+  if (!v.viento_dir)    { toast('⚠ Selecciona la dirección del viento'); return; }
+  if (!v.viento_vel)    { toast('⚠ Selecciona la velocidad del viento'); return; }
+  if (!v.precipitacion) { toast('⚠ Selecciona la precipitación'); return; }
+  if (!v.nubosidad)     { toast('⚠ Selecciona la nubosidad'); return; }
   geoGuardarVisita();
   mostrarPantalla('pantalla-geo-mapa');
   initOrtoMapa();
@@ -1506,8 +1519,10 @@ function geoGuardarObs() {
   const edad   = document.getElementById('go-edad')?.value;
   const vuelo  = document.getElementById('go-vuelo')?.value;
   const altura = document.getElementById('go-altura')?.value;
+  const hora   = document.getElementById('go-hora')?.value;
   if (!esp)    { toast('⚠ Selecciona una especie'); return; }
   if (!n)      { toast('⚠ Introduce el nº de individuos'); return; }
+  if (!hora)   { toast('⚠ Introduce la hora de la observación'); return; }
   if (!tipo)   { toast('⚠ Selecciona el tipo de observación'); return; }
   if (!sexo)   { toast('⚠ Selecciona el sexo'); return; }
   if (!edad)   { toast('⚠ Selecciona la edad'); return; }
