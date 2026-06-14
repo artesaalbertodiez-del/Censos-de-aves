@@ -106,9 +106,11 @@ body { font-family: Arial, sans-serif; font-size: 14px; color: var(--texto); bac
 .si-status.pendiente { background: #fff3e0; color: #e65100; }
 
 /* MAPA GEO */
-#mapa-container { position: relative; width: 100%; overflow: auto; background: #222; touch-action: pan-x pan-y; }
-#mapa-canvas { display: block; cursor: crosshair; }
-.punto-obs { position: absolute; width: 20px; height: 20px; background: #e53935; border: 2px solid white; border-radius: 50%; transform: translate(-50%,-50%); cursor: pointer; box-shadow: 0 2px 4px rgba(0,0,0,.4); z-index: 10; display: flex; align-items: center; justify-content: center; font-size: 9px; color: white; font-weight: 700; }
+#mapa-container { position: relative; width: 100%; overflow: hidden; background: #222; touch-action: none; user-select: none; }
+#mapa-img-wrap { position: absolute; top: 0; left: 0; transform-origin: 0 0; will-change: transform; }
+#mapa-img { display: block; max-width: none; }
+#mapa-puntos { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; }
+.punto-obs { position: absolute; width: 24px; height: 24px; background: #e53935; border: 2px solid white; border-radius: 50%; transform: translate(-50%,-50%); box-shadow: 0 2px 4px rgba(0,0,0,.4); display: flex; align-items: center; justify-content: center; font-size: 9px; color: white; font-weight: 700; pointer-events: all; cursor: pointer; }
 .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.5); z-index: 500; display: none; align-items: flex-end; }
 .modal-overlay.abierto { display: flex; }
 .modal-box { background: white; border-radius: 16px 16px 0 0; padding: 20px; width: 100%; max-height: 85vh; overflow-y: auto; }
@@ -368,12 +370,14 @@ body { font-family: Arial, sans-serif; font-size: 14px; color: var(--texto); bac
 <!-- ══════════ GEO — MAPA ══════════ -->
 <div class="pantalla" id="pantalla-geo-mapa">
   <div style="padding:8px 12px;background:#1a1a2e;color:white;font-size:12px;display:flex;align-items:center;justify-content:space-between">
-    <span>📍 Pulsa en la ortofoto para añadir una observación</span>
+    <span>📍 Tap para añadir · Pellizca para zoom · Arrastra para mover</span>
     <span id="geo-contador" style="background:#e53935;padding:2px 8px;border-radius:10px;font-weight:700">0 obs.</span>
   </div>
   <div id="mapa-container">
-    <canvas id="mapa-canvas"></canvas>
-    <div id="mapa-puntos"></div>
+    <div id="mapa-img-wrap">
+      <img id="mapa-img" src="" alt="Ortofoto PE Navaza">
+      <div id="mapa-puntos"></div>
+    </div>
   </div>
   <div class="barra-inf">
     <button class="btn-v" onclick="geoCerrar()">✅ Cerrar sesión</button>
@@ -1124,179 +1128,142 @@ let mapaBaseW = 0, mapaBaseH = 0;
 
 function initOrtoMapa() {
   const container = document.getElementById('mapa-container');
-  const canvas = document.getElementById('mapa-canvas');
-  const ctx = canvas.getContext('2d');
+  const wrap      = document.getElementById('mapa-img-wrap');
+  const img       = document.getElementById('mapa-img');
 
   const vh = window.innerHeight - 140;
   const vw = window.innerWidth;
-
-  // Cambiar touch-action para gestionar nosotros los gestos
-  container.style.touchAction = 'none';
-  container.style.overflow = 'hidden';
-  container.style.width = vw + 'px';
   container.style.height = vh + 'px';
 
-  if (!ortoImg) {
-    ortoImg = new Image();
-    ortoImg.onload = () => initDraw();
-    ortoImg.src = ORTO.src;
+  // Cargar imagen
+  if (!img.src || img.src === window.location.href) {
+    img.onload = () => initLayout();
+    img.src = ORTO.src;
   } else {
-    initDraw();
+    initLayout();
   }
 
-  function initDraw() {
+  function initLayout() {
     const ratio = ORTO.imgW / ORTO.imgH;
     let cw = vw, ch = vw / ratio;
     if (ch > vh) { ch = vh; cw = vh * ratio; }
     mapaBaseW = cw; mapaBaseH = ch;
-    mapaZoom = 1; mapaOffX = 0; mapaOffY = 0;
-    mapaEscala = cw / ORTO.imgW;
-    canvas.width = vw; canvas.height = vh;
-    draw();
+    mapaZoom = 1;
+    mapaOffX = (vw - cw) / 2;
+    mapaOffY = (vh - ch) / 2;
+    img.style.width  = cw + 'px';
+    img.style.height = ch + 'px';
+    applyTransform();
+    renderGeoPuntos();
   }
 
-  function draw() {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    const drawW = mapaBaseW * mapaZoom;
-    const drawH = mapaBaseH * mapaZoom;
-    ctx.drawImage(ortoImg, mapaOffX, mapaOffY, drawW, drawH);
-    renderGeoPuntosSobreCanvas(ctx);
+  function applyTransform() {
+    wrap.style.transform = `translate(${mapaOffX}px, ${mapaOffY}px) scale(${mapaZoom})`;
   }
 
-  // ── Pinch zoom y pan táctil ──
-  let lastDist = null, panStart = null, offStart = null;
-  let didPan = false, didPinch = false;
+  // ── Touch handling ──
+  let touch1 = null, touch2 = null;
+  let startZoom = 1, startDist = 0;
+  let startOffX = 0, startOffY = 0;
+  let startMidX = 0, startMidY = 0;
+  let didMove = false, didPinch = false;
 
   container.addEventListener('touchstart', e => {
     e.preventDefault();
-    didPan = false;
-    if (e.touches.length === 2) {
-      didPinch = true;
-      lastDist = Math.hypot(
-        e.touches[0].clientX - e.touches[1].clientX,
-        e.touches[0].clientY - e.touches[1].clientY
-      );
-      panStart = null; // cancelar pan si había uno
-    } else if (e.touches.length === 1) {
+    didMove = false;
+
+    if (e.touches.length === 1) {
       didPinch = false;
-      panStart = {x: e.touches[0].clientX, y: e.touches[0].clientY};
-      offStart = {x: mapaOffX, y: mapaOffY};
+      touch1 = {x: e.touches[0].clientX, y: e.touches[0].clientY};
+      startOffX = mapaOffX; startOffY = mapaOffY;
+    } else if (e.touches.length === 2) {
+      didPinch = true;
+      touch1 = {x: e.touches[0].clientX, y: e.touches[0].clientY};
+      touch2 = {x: e.touches[1].clientX, y: e.touches[1].clientY};
+      startDist = Math.hypot(touch1.x - touch2.x, touch1.y - touch2.y);
+      startZoom = mapaZoom;
+      startOffX = mapaOffX; startOffY = mapaOffY;
+      startMidX = (touch1.x + touch2.x) / 2;
+      startMidY = (touch1.y + touch2.y) / 2;
     }
-  }, {passive:false});
+  }, {passive: false});
 
   container.addEventListener('touchmove', e => {
     e.preventDefault();
+    didMove = true;
+
     if (e.touches.length === 2) {
       didPinch = true;
-      const newDist = Math.hypot(
-        e.touches[0].clientX - e.touches[1].clientX,
-        e.touches[0].clientY - e.touches[1].clientY
-      );
-      if (lastDist) {
-        const scale = newDist / lastDist;
-        const midX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
-        const midY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
-        const rect = canvas.getBoundingClientRect();
-        const cx = midX - rect.left, cy = midY - rect.top;
-        const newZoom = Math.min(Math.max(mapaZoom * scale, 0.5), 8);
-        mapaOffX = cx - (cx - mapaOffX) * (newZoom / mapaZoom);
-        mapaOffY = cy - (cy - mapaOffY) * (newZoom / mapaZoom);
-        mapaZoom = newZoom;
-        lastDist = newDist;
-        draw();
-      }
-    } else if (e.touches.length === 1 && panStart && !didPinch) {
-      const dx = e.touches[0].clientX - panStart.x;
-      const dy = e.touches[0].clientY - panStart.y;
-      if (Math.abs(dx) > 5 || Math.abs(dy) > 5) didPan = true;
-      mapaOffX = offStart.x + dx;
-      mapaOffY = offStart.y + dy;
-      draw();
+      const t1 = {x: e.touches[0].clientX, y: e.touches[0].clientY};
+      const t2 = {x: e.touches[1].clientX, y: e.touches[1].clientY};
+      const newDist = Math.hypot(t1.x - t2.x, t1.y - t2.y);
+      const newMidX = (t1.x + t2.x) / 2;
+      const newMidY = (t1.y + t2.y) / 2;
+      const scale = Math.min(Math.max(newDist / startDist, 0.1), 10);
+      mapaZoom = Math.min(Math.max(startZoom * scale, 0.3), 10);
+      // Ajustar offset para que el punto medio no se mueva
+      mapaOffX = newMidX - (startMidX - startOffX) * (mapaZoom / startZoom) - (startMidX - newMidX) * 0 + (newMidX - startMidX);
+      mapaOffY = newMidY - (startMidY - startOffY) * (mapaZoom / startZoom) + (newMidY - startMidY);
+      // Fórmula correcta: el punto bajo el dedo no se mueve
+      mapaOffX = startOffX + (newMidX - startMidX) - (startMidX - startOffX) * (mapaZoom/startZoom - 1);
+      mapaOffY = startOffY + (newMidY - startMidY) - (startMidY - startOffY) * (mapaZoom/startZoom - 1);
+      applyTransform();
+    } else if (e.touches.length === 1 && !didPinch) {
+      const dx = e.touches[0].clientX - touch1.x;
+      const dy = e.touches[0].clientY - touch1.y;
+      mapaOffX = startOffX + dx;
+      mapaOffY = startOffY + dy;
+      applyTransform();
     }
-  }, {passive:false});
+  }, {passive: false});
 
   container.addEventListener('touchend', e => {
-    // Si quedan dedos en la pantalla, no hacer nada todavía
-    if (e.touches.length > 0) return;
+    // Si quedan dedos aún en pantalla, no procesar tap
+    if (e.touches.length > 0) { didPinch = true; return; }
 
-    lastDist = null;
-
-    // Solo abrir modal si fue un tap limpio: sin pan, sin pinch, un solo dedo
-    if (!didPan && !didPinch && e.changedTouches.length === 1) {
-      const touch = e.changedTouches[0];
-      const rect = canvas.getBoundingClientRect();
-      const px = touch.clientX - rect.left;
-      const py = touch.clientY - rect.top;
-      const imgX = (px - mapaOffX) / mapaZoom;
-      const imgY = (py - mapaOffY) / mapaZoom;
+    // Tap limpio: un dedo, sin movimiento apreciable, sin pinch
+    if (!didMove && !didPinch && e.changedTouches.length === 1) {
+      const t = e.changedTouches[0];
+      const rect = container.getBoundingClientRect();
+      // Coordenadas en el espacio de la imagen sin zoom
+      const imgX = (t.clientX - rect.left - mapaOffX) / mapaZoom;
+      const imgY = (t.clientY - rect.top  - mapaOffY) / mapaZoom;
       if (imgX >= 0 && imgX <= mapaBaseW && imgY >= 0 && imgY <= mapaBaseH) {
         const utm = pxToUtm(imgX, imgY, mapaBaseW, mapaBaseH);
         pendingUtm = {...utm};
         abrirModalObs(utm);
       }
     }
+    if (e.touches.length === 0) { didPinch = false; didMove = false; }
+  }, {passive: false});
 
-    // Reset flags al levantar todos los dedos
-    didPan = false;
-    didPinch = false;
-    panStart = null;
-  });
-
-  // Zoom con doble clic en escritorio
-  canvas.ondblclick = (e) => {
-    const rect = canvas.getBoundingClientRect();
-    const cx = e.clientX - rect.left, cy = e.clientY - rect.top;
-    const newZoom = Math.min(mapaZoom * 2, 8);
-    mapaOffX = cx - (cx - mapaOffX) * (newZoom / mapaZoom);
-    mapaOffY = cy - (cy - mapaOffY) * (newZoom / mapaZoom);
-    mapaZoom = newZoom;
-    draw();
-  };
-
-  // Clic en escritorio para añadir observación
-  canvas.onclick = (e) => {
-    const rect = canvas.getBoundingClientRect();
-    const px = e.clientX - rect.left, py = e.clientY - rect.top;
-    const imgX = (px - mapaOffX) / mapaZoom;
-    const imgY = (py - mapaOffY) / mapaZoom;
+  // Clic en escritorio
+  container.addEventListener('click', e => {
+    if (didMove) return;
+    const rect = container.getBoundingClientRect();
+    const imgX = (e.clientX - rect.left - mapaOffX) / mapaZoom;
+    const imgY = (e.clientY - rect.top  - mapaOffY) / mapaZoom;
     if (imgX >= 0 && imgX <= mapaBaseW && imgY >= 0 && imgY <= mapaBaseH) {
       const utm = pxToUtm(imgX, imgY, mapaBaseW, mapaBaseH);
       pendingUtm = {...utm};
       abrirModalObs(utm);
     }
-  };
-
-  // Guardar función draw para poder redibujar al cerrar el modal
-  window._mapaDraw = draw;
-}
-
-function renderGeoPuntosSobreCanvas(ctx) {
-  geoObservaciones.forEach((o, i) => {
-    const p = utmToPx(o.utm_x, o.utm_y, mapaBaseW, mapaBaseH);
-    const px = p.px * mapaZoom + mapaOffX;
-    const py = p.py * mapaZoom + mapaOffY;
-    ctx.beginPath();
-    ctx.arc(px, py, 10, 0, Math.PI*2);
-    ctx.fillStyle = '#e53935';
-    ctx.fill();
-    ctx.strokeStyle = 'white';
-    ctx.lineWidth = 2;
-    ctx.stroke();
-    ctx.fillStyle = 'white';
-    ctx.font = 'bold 10px Arial';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(i+1, px, py);
   });
+
+  window._mapaApplyTransform = applyTransform;
 }
 
-function renderGeoPuntos(cw, ch) {
-  // Los puntos ahora se dibujan sobre el canvas en renderGeoPuntosSobreCanvas
-  // Esta función se llama para forzar un redibujado
-  if (window._mapaDraw) window._mapaDraw();
+function renderGeoPuntosSobreCanvas(ctx) {} // no usado con img approach
+
+function renderGeoPuntos() {
+  const cont = document.getElementById('mapa-puntos');
+  if (!cont) return;
+  cont.innerHTML = geoObservaciones.map((o, i) => {
+    const p = utmToPx(o.utm_x, o.utm_y, mapaBaseW, mapaBaseH);
+    return `<div class="punto-obs" style="left:${p.px}px;top:${p.py}px"
+      onclick="geoVerObs(${i})">${i+1}</div>`;
+  }).join('');
   document.getElementById('geo-contador').textContent = `${geoObservaciones.length} obs.`;
-  // Limpiar divs de puntos (ya no se usan)
-  document.getElementById('mapa-puntos').innerHTML = '';
 }
 
 function abrirModalObs(utm) {
@@ -1312,7 +1279,6 @@ function abrirModalObs(utm) {
 function cerrarModal() {
   document.getElementById('modal-obs').classList.remove('abierto');
   pendingUtm = null;
-  if (window._mapaDraw) window._mapaDraw();
 }
 
 function geoGuardarObs() {
@@ -1329,8 +1295,7 @@ function geoGuardarObs() {
   geoGuardarVisita();
   cerrarModal();
   toast(`✓ ${esp} añadido`);
-  const canvas = document.getElementById('mapa-canvas');
-  renderGeoPuntos(canvas.width, canvas.height);
+  renderGeoPuntos();
 }
 
 function geoVerObs(i) {
@@ -1340,8 +1305,7 @@ function geoVerObs(i) {
   if (confirm(info + '\n\n¿Eliminar esta observación?')) {
     geoObservaciones.splice(i,1);
     geoGuardarVisita();
-    const canvas=document.getElementById('mapa-canvas');
-    renderGeoPuntos(canvas.width,canvas.height);
+    renderGeoPuntos();
     toast('Observación eliminada');
   }
 }
