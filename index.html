@@ -125,7 +125,9 @@ body { font-family: Arial, sans-serif; font-size: 14px; color: var(--texto); bac
 .si-status.subido { background: var(--verde-claro); color: var(--verde); }
 .si-status.pendiente { background: #fff3e0; color: #e65100; }
 
-/* LISTADO OBS GEO */
+/* POSICIÓN GPS */
+#mi-posicion { position: absolute; width: 16px; height: 16px; background: #0277BD; border: 2px solid white; border-radius: 50%; transform: translate(-50%,-50%); box-shadow: 0 0 0 4px rgba(2,119,189,0.3); pointer-events: none; display: none; animation: pulsar 1.5s infinite; }
+@keyframes pulsar { 0%,100% { box-shadow: 0 0 0 3px rgba(2,119,189,0.4); } 50% { box-shadow: 0 0 0 8px rgba(2,119,189,0.1); } }
 #geo-obs-panel { background: white; border-top: 2px solid var(--verde); max-height: 240px; overflow-y: auto; }
 .geo-obs-item { display: flex; align-items: center; padding: 8px 12px; border-bottom: 1px solid #f0f0f0; gap: 8px; }
 .geo-obs-num { background: #e53935; color: white; border-radius: 50%; width: 20px; height: 20px; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 700; flex-shrink: 0; }
@@ -440,12 +442,16 @@ body { font-family: Arial, sans-serif; font-size: 14px; color: var(--texto); bac
 <div class="pantalla" id="pantalla-geo-mapa">
   <div style="padding:8px 12px;background:#1a1a2e;color:white;font-size:12px;display:flex;align-items:center;justify-content:space-between">
     <span>📍 Tap para añadir · Pellizca para zoom · Arrastra para mover</span>
-    <span id="geo-contador" style="background:#e53935;padding:2px 8px;border-radius:10px;font-weight:700">0 obs.</span>
+    <div style="display:flex;align-items:center;gap:8px">
+      <button onclick="geoMiPosicion()" style="background:#0277BD;color:white;border:none;border-radius:6px;padding:4px 10px;font-size:11px;cursor:pointer;font-family:Arial">🎯 Mi posición</button>
+      <span id="geo-contador" style="background:#e53935;padding:2px 8px;border-radius:10px;font-weight:700">0 obs.</span>
+    </div>
   </div>
   <div id="mapa-container">
     <div id="mapa-img-wrap">
       <img id="mapa-img" src="" alt="Ortofoto">
       <div id="mapa-puntos"></div>
+      <div id="mi-posicion"></div>
     </div>
   </div>
   <div class="barra-inf">
@@ -599,8 +605,67 @@ function utmToPx(utmX, utmY, canvasW, canvasH) {
 }
 
 // ══════════════════════════════════════════════
-// ZONAS DE ESTUDIO
+// CONVERSIÓN WGS84 → UTM ETRS89 zona 30N
 // ══════════════════════════════════════════════
+function wgs84ToUtm30N(lat, lon) {
+  const a = 6378137.0, f = 1/298.257223563;
+  const b = a*(1-f), e2 = 1-(b*b)/(a*a), e = Math.sqrt(e2);
+  const k0 = 0.9996, lon0 = -3 * Math.PI / 180;
+  const latR = lat * Math.PI / 180, lonR = lon * Math.PI / 180;
+  const N = a / Math.sqrt(1 - e2 * Math.sin(latR)**2);
+  const T = Math.tan(latR)**2, C = e2/(1-e2) * Math.cos(latR)**2;
+  const A = Math.cos(latR) * (lonR - lon0);
+  const e4 = e2*e2, e6 = e4*e2;
+  const M = a*((1 - e2/4 - 3*e4/64 - 5*e6/256)*latR
+    - (3*e2/8 + 3*e4/32 + 45*e6/1024)*Math.sin(2*latR)
+    + (15*e4/256 + 45*e6/1024)*Math.sin(4*latR)
+    - (35*e6/3072)*Math.sin(6*latR));
+  const x = k0*N*(A + (1-T+C)*A**3/6 + (5-18*T+T**2+72*C-58*e2/(1-e2))*A**5/120) + 500000;
+  const y = k0*(M + N*Math.tan(latR)*(A**2/2 + (5-T+9*C+4*C**2)*A**4/24
+    + (61-58*T+T**2+600*C-330*e2/(1-e2))*A**6/720));
+  return { x: Math.round(x), y: Math.round(y) };
+}
+
+// ── Mostrar mi posición en la ortofoto ──
+let posicionWatchId = null;
+
+function geoMiPosicion() {
+  if (!navigator.geolocation) { toast('⚠ GPS no disponible en este dispositivo'); return; }
+  toast('Obteniendo posición GPS…');
+
+  navigator.geolocation.getCurrentPosition(pos => {
+    const lat = pos.coords.latitude, lon = pos.coords.longitude;
+    const utm = wgs84ToUtm30N(lat, lon);
+
+    // Verificar si está dentro de la ortofoto
+    if (utm.x < ORTO.xmin || utm.x > ORTO.xmax || utm.y < ORTO.ymin || utm.y > ORTO.ymax) {
+      toast('⚠ Tu posición está fuera del área de la ortofoto');
+      return;
+    }
+
+    // Calcular posición en píxeles de la imagen
+    const p = utmToPx(utm.x, utm.y, mapaBaseW, mapaBaseH);
+    const marker = document.getElementById('mi-posicion');
+    if (marker) {
+      marker.style.left = p.px + 'px';
+      marker.style.top  = p.py + 'px';
+      marker.style.display = 'block';
+    }
+
+    // Centrar el mapa en la posición
+    const container = document.getElementById('mapa-container');
+    const vw = container?.clientWidth  || window.innerWidth;
+    const vh = container?.clientHeight || window.innerHeight - 140;
+    mapaOffX = vw/2 - p.px * mapaZoom;
+    mapaOffY = vh/2 - p.py * mapaZoom;
+    if (window._mapaApplyTransform) window._mapaApplyTransform();
+
+    toast(`✓ Posición: UTM X ${utm.x} · Y ${utm.y} · Precisión: ${Math.round(pos.coords.accuracy)}m`);
+  }, err => {
+    const msgs = { 1:'Permiso denegado', 2:'Posición no disponible', 3:'Tiempo de espera agotado' };
+    toast('⚠ GPS: ' + (msgs[err.code] || 'Error desconocido'));
+  }, { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 });
+}
 const ZONAS = {
   navaza: {
     nombre: 'PE Navaza',
@@ -712,7 +777,7 @@ function guardarAjustes() {
 // ══════════════════════════════════════════════
 // GOOGLE AUTH
 // ══════════════════════════════════════════════
-const CLIENT_ID = '367256652135-asmosgmulfi8uog242b8shbivubehiei.apps.googleusercontent.com'; // Rellenar con el CLIENT_ID de Google Cloud
+const CLIENT_ID = ''; // Rellenar con el CLIENT_ID de Google Cloud
 const SCOPES = 'https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/drive.file';
 
 function googleLogin() {
