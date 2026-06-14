@@ -105,12 +105,19 @@ body { font-family: Arial, sans-serif; font-size: 14px; color: var(--texto); bac
 .si-status.subido { background: var(--verde-claro); color: var(--verde); }
 .si-status.pendiente { background: #fff3e0; color: #e65100; }
 
-/* MAPA GEO */
+/* LISTADO OBS GEO */
+#geo-obs-panel { background: white; border-top: 2px solid var(--verde); max-height: 240px; overflow-y: auto; }
+.geo-obs-item { display: flex; align-items: center; padding: 8px 12px; border-bottom: 1px solid #f0f0f0; gap: 8px; }
+.geo-obs-num { background: #e53935; color: white; border-radius: 50%; width: 20px; height: 20px; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 700; flex-shrink: 0; }
+.geo-obs-info { flex: 1; min-width: 0; }
+.geo-obs-esp { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.geo-obs-meta { font-size: 11px; color: var(--texto2); }
+.geo-obs-acciones { display: flex; gap: 4px; flex-shrink: 0; }
 #mapa-container { position: relative; width: 100%; overflow: hidden; background: #222; touch-action: none; user-select: none; }
 #mapa-img-wrap { position: absolute; top: 0; left: 0; transform-origin: 0 0; will-change: transform; }
 #mapa-img { display: block; max-width: none; }
 #mapa-puntos { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; }
-.punto-obs { position: absolute; width: 24px; height: 24px; background: #e53935; border: 2px solid white; border-radius: 50%; transform: translate(-50%,-50%); box-shadow: 0 2px 4px rgba(0,0,0,.4); display: flex; align-items: center; justify-content: center; font-size: 9px; color: white; font-weight: 700; pointer-events: all; cursor: pointer; }
+.punto-obs { position: absolute; width: 16px; height: 16px; background: rgba(229,57,53,0.85); border: 1.5px solid white; border-radius: 50%; transform: translate(-50%,-50%); box-shadow: 0 1px 3px rgba(0,0,0,.4); display: flex; align-items: center; justify-content: center; font-size: 8px; color: white; font-weight: 700; pointer-events: all; cursor: pointer; }
 .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.5); z-index: 500; display: none; align-items: flex-end; }
 .modal-overlay.abierto { display: flex; }
 .modal-box { background: white; border-radius: 16px 16px 0 0; padding: 20px; width: 100%; max-height: 85vh; overflow-y: auto; }
@@ -185,6 +192,18 @@ body { font-family: Arial, sans-serif; font-size: 14px; color: var(--texto); bac
 <!-- ══════════ CENSO — VISITA ══════════ -->
 <div class="pantalla" id="pantalla-censo-visita">
   <div class="contenido">
+    <div class="seccion">
+      <div class="sec-cab">Zona de estudio</div>
+      <div class="sec-body">
+        <div class="campo">
+          <label>Zona</label>
+          <select id="cv-zona" onchange="censoActualizarZona()">
+            <option value="">— Seleccionar —</option>
+            <option value="navaza">PE Navaza</option>
+          </select>
+        </div>
+      </div>
+    </div>
     <div class="seccion">
       <div class="sec-cab">Datos generales de la visita</div>
       <div class="sec-body">
@@ -302,6 +321,18 @@ body { font-family: Arial, sans-serif; font-size: 14px; color: var(--texto); bac
 <div class="pantalla" id="pantalla-geo-visita">
   <div class="contenido">
     <div class="seccion">
+      <div class="sec-cab">Zona de estudio</div>
+      <div class="sec-body">
+        <div class="campo">
+          <label>Zona</label>
+          <select id="gv-zona" onchange="geoActualizarZona()">
+            <option value="">— Seleccionar —</option>
+            <option value="navaza">PE Navaza</option>
+          </select>
+        </div>
+      </div>
+    </div>
+    <div class="seccion">
       <div class="sec-cab">Datos generales</div>
       <div class="sec-body">
         <div class="fila f2">
@@ -375,10 +406,11 @@ body { font-family: Arial, sans-serif; font-size: 14px; color: var(--texto); bac
   </div>
   <div id="mapa-container">
     <div id="mapa-img-wrap">
-      <img id="mapa-img" src="" alt="Ortofoto PE Navaza">
+      <img id="mapa-img" src="" alt="Ortofoto">
       <div id="mapa-puntos"></div>
     </div>
   </div>
+  <div id="geo-obs-panel"></div>
   <div class="barra-inf">
     <button class="btn-v" onclick="geoCerrar()">✅ Cerrar sesión</button>
     <button class="btn-g" onclick="geoGuardarVisita()">💾 Guardar</button>
@@ -530,8 +562,17 @@ function utmToPx(utmX, utmY, canvasW, canvasH) {
 }
 
 // ══════════════════════════════════════════════
-// ESTADO GLOBAL
+// ZONAS DE ESTUDIO
 // ══════════════════════════════════════════════
+const ZONAS = {
+  navaza: {
+    nombre: 'PE Navaza',
+    estaciones: 10,
+    orto: ORTO,  // referencia a la ortofoto definida más abajo
+  },
+  // Para añadir una nueva zona en el futuro:
+  // nueva_zona: { nombre: 'PE Nueva', estaciones: 8, orto: ORTO_NUEVA }
+};
 let gAccessToken = null;
 let censoId = null, censosPuntos = [];
 let geoId = null, geoObservaciones = [];
@@ -750,6 +791,57 @@ function obsFormHtml(prefix) {
     </div>`;
 }
 
+// Formulario Geo SIN campo Distancia
+function obsFormHtmlGeo(prefix) {
+  return `
+    <div class="fila f2" style="margin-bottom:10px">
+      <div class="campo" style="grid-column:span 2">
+        <label>Especie</label>
+        <div class="autocomplete-wrap">
+          <input type="text" id="${prefix}-especie" placeholder="Escribir para buscar..."
+            autocomplete="off" oninput="acOpen('${prefix}-especie','${prefix}-ac')"
+            onkeydown="acKey(event,'${prefix}-especie','${prefix}-ac')">
+          <div class="autocomplete-list" id="${prefix}-ac" style="display:none"></div>
+        </div>
+      </div>
+      <div class="campo" style="grid-column:span 2">
+        <label>Nombre científico</label>
+        <input type="text" id="${prefix}-sci" style="font-style:italic" placeholder="Automático" readonly>
+      </div>
+    </div>
+    <div class="fila f2" style="margin-bottom:10px">
+      <div class="campo"><label>Nº individuos</label><input type="number" id="${prefix}-n" min="1" placeholder="1"></div>
+      <div class="campo"><label>Tipo observación</label>
+        <select id="${prefix}-tipo"><option value="">—</option><option value="Vista">Vista</option><option value="Oída">Oída</option></select>
+      </div>
+      <div class="campo"><label>Sexo</label>
+        <select id="${prefix}-sexo"><option value="">—</option>
+          <option value="1">1 — Macho</option><option value="2">2 — Hembra</option><option value="3">3 — Indet.</option>
+        </select>
+      </div>
+      <div class="campo"><label>Edad</label>
+        <select id="${prefix}-edad"><option value="">—</option>
+          <option value="3">3 — Juvenil</option><option value="4">4 — Adulto</option><option value="0">0 — Indet.</option>
+        </select>
+      </div>
+      <div class="campo"><label>Tipo vuelo</label>
+        <select id="${prefix}-vuelo"><option value="">—</option>
+          <option value="1">1 — Posado</option><option value="2">2 — Vuelo con paradas</option>
+          <option value="3">3 — Vuelo lineal</option><option value="4">4 — Cicleo</option>
+        </select>
+      </div>
+      <div class="campo"><label>Altura vuelo</label>
+        <select id="${prefix}-altura"><option value="">—</option>
+          <option value="1">1 — Posado</option><option value="2">2 — Bajo palas</option>
+          <option value="3">3 — Altura colisión</option><option value="4">4 — Sobre palas</option>
+        </select>
+      </div>
+    </div>
+    <div class="campo"><label>Observaciones</label>
+      <input type="text" id="${prefix}-obs" placeholder="Observaciones opcionales">
+    </div>`;
+}
+
 function leerObs(prefix) {
   return {
     especie_comun:     document.getElementById(`${prefix}-especie`)?.value || '',
@@ -773,12 +865,29 @@ function abrirCenso() {
   mostrarPantalla('pantalla-menu-censo');
 }
 
+function censoActualizarZona() {
+  const z = document.getElementById('cv-zona').value;
+  const zona = ZONAS[z];
+  if (zona) {
+    const n = zona.estaciones;
+    censosPuntos = [0,...Array.from({length:n},(_,i)=>i+1)].map(n=>({num:n,horaInicio:'',observaciones:[]}));
+    toast('✓ ' + zona.nombre + ' · ' + n + ' estaciones');
+  }
+}
+
+function geoActualizarZona() {
+  const z = document.getElementById('gv-zona').value;
+  const zona = ZONAS[z];
+  if (zona) toast('✓ Zona: ' + zona.nombre);
+}
+
 function censoNuevo() {
   censoId = 'censo_' + Date.now();
   censosPuntos = [0,...Array.from({length:10},(_,i)=>i+1)].map(n=>({num:n,horaInicio:'',observaciones:[]}));
   const aj = LS.getAj();
   document.getElementById('cv-fecha').value = new Date().toISOString().split('T')[0];
   document.getElementById('cv-observador').value = aj.observador || '';
+  document.getElementById('cv-zona').value = 'navaza';
   ['cv-hora-inicio','cv-hora-fin','cv-temperatura','cv-visibilidad',
    'cv-viento-dir','cv-viento-vel','cv-precipitacion','cv-nubosidad'].forEach(id => {
     const el = document.getElementById(id); if(el) el.value='';
@@ -1074,6 +1183,7 @@ function geoNuevo() {
   const aj=LS.getAj();
   document.getElementById('gv-fecha').value=new Date().toISOString().split('T')[0];
   document.getElementById('gv-observador').value=aj.observador||'';
+  document.getElementById('gv-zona').value='navaza';
   ['gv-hora-inicio','gv-hora-fin','gv-temperatura','gv-visibilidad',
    'gv-viento-dir','gv-viento-vel','gv-precipitacion','gv-nubosidad'].forEach(id=>{
     const el=document.getElementById(id); if(el) el.value='';
@@ -1120,6 +1230,7 @@ function geoIniciarMapa() {
   geoGuardarVisita();
   mostrarPantalla('pantalla-geo-mapa');
   initOrtoMapa();
+  renderGeoObsPanel();
 }
 
 let mapaEscala = 1;
@@ -1131,7 +1242,7 @@ function initOrtoMapa() {
   const wrap      = document.getElementById('mapa-img-wrap');
   const img       = document.getElementById('mapa-img');
 
-  const vh = window.innerHeight - 140;
+  const vh = window.innerHeight - 280; // espacio para barra superior, panel y barra inferior
   const vw = window.innerWidth;
   container.style.height = vh + 'px';
 
@@ -1270,10 +1381,31 @@ function abrirModalObs(utm) {
   document.getElementById('modal-obs-coords').textContent =
     `UTM X: ${utm.x} · UTM Y: ${utm.y}`;
   document.getElementById('modal-obs-form').innerHTML =
-    obsFormHtml('go') + `<div class="campo" style="margin-top:8px">
+    obsFormHtmlGeo('go') + `<div class="campo" style="margin-top:8px">
       <label>Hora</label><input type="time" id="go-hora">
     </div>`;
   document.getElementById('modal-obs').classList.add('abierto');
+}
+
+function renderGeoObsPanel() {
+  const panel = document.getElementById('geo-obs-panel');
+  if (!panel) return;
+  if (!geoObservaciones.length) {
+    panel.innerHTML = '<p style="padding:10px 12px;font-size:12px;color:var(--texto2)">Sin observaciones aún. Tap en la ortofoto para añadir.</p>';
+    return;
+  }
+  panel.innerHTML = geoObservaciones.map((o, i) => `
+    <div class="geo-obs-item">
+      <div class="geo-obs-num">${i+1}</div>
+      <div class="geo-obs-info">
+        <div class="geo-obs-esp">${o.especie_comun || '—'}</div>
+        <div class="geo-obs-meta">Nº: ${o.n_individuos||'—'} · ${o.hora||'—'} · UTM(${o.utm_x},${o.utm_y})</div>
+      </div>
+      <div class="geo-obs-acciones">
+        <button class="btn-a btn-sm" onclick="geoEditarObs(${i})">✏️</button>
+        <button class="btn-r btn-sm" onclick="geoEliminarObs(${i})">✕</button>
+      </div>
+    </div>`).join('');
 }
 
 function cerrarModal() {
@@ -1291,23 +1423,70 @@ function geoGuardarObs() {
     hora: document.getElementById('go-hora')?.value || '',
     ts: Date.now(),
   };
+  // Sin distancia en geo
+  delete obs.distancia;
   geoObservaciones.push(obs);
   geoGuardarVisita();
   cerrarModal();
   toast(`✓ ${esp} añadido`);
   renderGeoPuntos();
+  renderGeoObsPanel();
+}
+
+function geoEditarObs(i) {
+  const o = geoObservaciones[i];
+  if (!o) return;
+  // Reusar modal con datos precargados
+  document.getElementById('modal-obs-coords').textContent =
+    `Editando obs. ${i+1} · UTM X: ${o.utm_x} · UTM Y: ${o.utm_y}`;
+  document.getElementById('modal-obs-form').innerHTML =
+    obsFormHtmlGeo('go') + `<div class="campo" style="margin-top:8px">
+      <label>Hora</label><input type="time" id="go-hora">
+    </div>`;
+  document.getElementById('modal-obs').classList.add('abierto');
+  // Guardar índice para actualizar en lugar de añadir
+  pendingUtm = {x: o.utm_x, y: o.utm_y, editIdx: i};
+  setTimeout(() => {
+    const set = (id, v) => { const el=document.getElementById(id); if(el&&v) el.value=v; };
+    set('go-especie', o.especie_comun); set('go-sci', o.especie_cientifico);
+    set('go-n', o.n_individuos); set('go-tipo', o.tipo_observacion);
+    set('go-sexo', o.sexo); set('go-edad', o.edad);
+    set('go-vuelo', o.tipo_vuelo); set('go-altura', o.altura_vuelo);
+    set('go-obs', o.observaciones); set('go-hora', o.hora);
+    // Cambiar botón a "Actualizar"
+    const btn = document.querySelector('#modal-obs .btn-v');
+    if (btn) { btn.textContent = '✓ Actualizar'; btn.onclick = () => geoActualizarObs(); }
+  }, 50);
+}
+
+function geoActualizarObs() {
+  if (!pendingUtm || pendingUtm.editIdx === undefined) return;
+  const obs = {
+    ...leerObs('go'),
+    utm_x: pendingUtm.x, utm_y: pendingUtm.y,
+    hora: document.getElementById('go-hora')?.value || '',
+    ts: Date.now(),
+  };
+  delete obs.distancia;
+  geoObservaciones[pendingUtm.editIdx] = obs;
+  geoGuardarVisita();
+  cerrarModal();
+  toast('✓ Observación actualizada');
+  renderGeoPuntos();
+  renderGeoObsPanel();
+}
+
+function geoEliminarObs(i) {
+  if (!confirm('¿Eliminar esta observación?')) return;
+  geoObservaciones.splice(i, 1);
+  geoGuardarVisita();
+  renderGeoPuntos();
+  renderGeoObsPanel();
+  toast('Observación eliminada');
 }
 
 function geoVerObs(i) {
-  const o = geoObservaciones[i];
-  if (!o) return;
-  const info = `${i+1}. ${o.especie_comun||'—'} · ${o.n_individuos||'—'} ind · UTM (${o.utm_x},${o.utm_y})`;
-  if (confirm(info + '\n\n¿Eliminar esta observación?')) {
-    geoObservaciones.splice(i,1);
-    geoGuardarVisita();
-    renderGeoPuntos();
-    toast('Observación eliminada');
-  }
+  geoEditarObs(i);
 }
 
 function geoAbrirHistorial() { renderGeoHistorial(); mostrarPantalla('pantalla-geo-historial'); }
