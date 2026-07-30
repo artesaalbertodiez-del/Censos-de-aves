@@ -1,5 +1,5 @@
 // ── Service Worker — Censos de Aves ──
-const CACHE = 'censos-aves-3'; // incrementado para forzar reinstalación
+const CACHE = 'censos-aves-4'; // incrementado para forzar reinstalación
 
 const ARCHIVOS = [
   './',
