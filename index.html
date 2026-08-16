@@ -1046,7 +1046,7 @@ function obsFormHtml(prefix) {
       </div>
     </div>
     <div class="fila f2" style="margin-bottom:10px">
-      <div class="campo"><label>Nº individuos</label><input type="number" id="${prefix}-n" min="1" placeholder="1"></div>
+      <div class="campo"><label>Nº individuos</label><input type="number" id="${prefix}-n" min="1" placeholder=""></div>
       <div class="campo"><label>Tipo observación</label>
         <select id="${prefix}-tipo"><option value="">—</option><option value="Vista">Vista</option><option value="Oída">Oída</option></select>
       </div>
@@ -1111,7 +1111,7 @@ function obsFormHtmlGeo(prefix, especieActual) {
       </div>
     </div>
     <div class="fila f2" style="margin-bottom:10px">
-      <div class="campo"><label>Nº individuos</label><input type="number" id="${prefix}-n" min="1" placeholder="1"></div>
+      <div class="campo"><label>Nº individuos</label><input type="number" id="${prefix}-n" min="1" placeholder=""></div>
       <div class="campo"><label>Tipo observación</label>
         <select id="${prefix}-tipo"><option value="">—</option><option value="Vista">Vista</option><option value="Oída">Oída</option></select>
       </div>
@@ -1369,13 +1369,16 @@ function censoGuardarObs(num) {
   const edad = document.getElementById(`co-${num}-edad`)?.value;
   const vuelo  = document.getElementById(`co-${num}-vuelo`)?.value;
   const altura = document.getElementById(`co-${num}-altura`)?.value;
-  if (!esp)    { toast('⚠ Selecciona una especie'); return; }
-  if (!n)      { toast('⚠ Introduce el nº de individuos'); return; }
-  if (!tipo)   { toast('⚠ Selecciona el tipo de observación'); return; }
-  if (!sexo)   { toast('⚠ Selecciona el sexo'); return; }
-  if (!edad)   { toast('⚠ Selecciona la edad'); return; }
-  if (!vuelo)  { toast('⚠ Selecciona el tipo de vuelo'); return; }
-  if (!altura) { toast('⚠ Selecciona la altura de vuelo'); return; }
+  if (!esp) { toast('⚠ Selecciona una especie'); return; }
+  // Si es "Sin observaciones" no se validan los demás campos
+  if (esp !== 'Sin observaciones') {
+    if (!n)      { toast('⚠ Introduce el nº de individuos'); return; }
+    if (!tipo)   { toast('⚠ Selecciona el tipo de observación'); return; }
+    if (!sexo)   { toast('⚠ Selecciona el sexo'); return; }
+    if (!edad)   { toast('⚠ Selecciona la edad'); return; }
+    if (!vuelo)  { toast('⚠ Selecciona el tipo de vuelo'); return; }
+    if (!altura) { toast('⚠ Selecciona la altura de vuelo'); return; }
+  }
   const p = censosPuntos.find(x=>x.num===num);
   if (p) p.observaciones.push(leerObs(`co-${num}`));
   censoGuardarVisita();
@@ -1789,15 +1792,18 @@ function geoGuardarObs() {
   const hora   = document.getElementById('go-hora')?.value;
   const dup    = document.getElementById('go-duplicado')?.value || 'No';
   const dupId  = document.getElementById('go-dup-id')?.value || '';
-  if (!esp)              { toast('⚠ Selecciona una especie'); return; }
-  if (!n)                { toast('⚠ Introduce el nº de individuos'); return; }
-  if (!hora)             { toast('⚠ Introduce la hora de la observación'); return; }
-  if (!tipo)             { toast('⚠ Selecciona el tipo de observación'); return; }
-  if (!sexo)             { toast('⚠ Selecciona el sexo'); return; }
-  if (!edad)             { toast('⚠ Selecciona la edad'); return; }
-  if (!vuelo)            { toast('⚠ Selecciona el tipo de vuelo'); return; }
-  if (!altura)           { toast('⚠ Selecciona la altura de vuelo'); return; }
-  if (dup === 'Si' && !dupId) { toast('⚠ Indica qué observación se repite'); return; }
+  if (!esp) { toast('⚠ Selecciona una especie'); return; }
+  // Si es "Sin observaciones" no se validan los demás campos
+  if (esp !== 'Sin observaciones') {
+    if (!n)      { toast('⚠ Introduce el nº de individuos'); return; }
+    if (!hora)   { toast('⚠ Introduce la hora de la observación'); return; }
+    if (!tipo)   { toast('⚠ Selecciona el tipo de observación'); return; }
+    if (!sexo)   { toast('⚠ Selecciona el sexo'); return; }
+    if (!edad)   { toast('⚠ Selecciona la edad'); return; }
+    if (!vuelo)  { toast('⚠ Selecciona el tipo de vuelo'); return; }
+    if (!altura) { toast('⚠ Selecciona la altura de vuelo'); return; }
+    if (dup === 'Si' && !dupId) { toast('⚠ Indica qué observación se repite'); return; }
+  }
   if (!pendingUtm) return;
   // ID: duplicado usa el ID del original; nuevo asigna correlativo
   const nuevoId = dup === 'Si' ? dupId : String(geoObservaciones.length + 1);
